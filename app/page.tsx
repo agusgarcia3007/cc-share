@@ -30,7 +30,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { formatCardNumber, formatExpiryDate } from "@/lib/utils";
+import { formatCardNumber, formatExpiryDate, getCardType } from "@/lib/utils";
 import { encrypt, exportKey, toBase58 } from "@/lib/encryption";
 import { encodeCompositeKey, LATEST_KEY_VERSION } from "@/lib/encoding";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -46,6 +46,7 @@ import {
 import { useForm } from "react-hook-form";
 import { useState } from "react";
 import { z } from "zod";
+import { useStoreCard } from "@/services/cards/mutation";
 
 const formSchema = z.object({
   cardholderName: z
@@ -96,10 +97,11 @@ const formSchema = z.object({
 type FormData = z.infer<typeof formSchema>;
 
 export default function CreditCardShare() {
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [link, setLink] = useState("");
   const [copied, setCopied] = useState(false);
+
+  const { mutate: storeCard, isPending } = useStoreCard();
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -117,7 +119,6 @@ export default function CreditCardShare() {
     try {
       setError("");
       setLink("");
-      setLoading(true);
 
       const cardData = {
         cardholderName: data.cardholderName,
@@ -129,41 +130,36 @@ export default function CreditCardShare() {
       const { encrypted, iv, key } = await encrypt(JSON.stringify(cardData));
       const keyBuffer = await exportKey(key);
 
-      const response = await fetch("/api/store", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
+      storeCard(
+        {
           encrypted: toBase58(encrypted),
           iv: toBase58(iv),
           ttl: parseInt(data.ttl),
           reads: data.reads === "999" ? null : parseInt(data.reads),
-        }),
-      });
+        },
+        {
+          onSuccess: (result) => {
+            const compositeKey = encodeCompositeKey(
+              LATEST_KEY_VERSION,
+              result.id,
+              keyBuffer
+            );
 
-      if (!response.ok) {
-        throw new Error("Error al almacenar los datos");
-      }
+            const url = new URL(window.location.href);
+            url.pathname = `/unseal/${result.id}`;
+            url.hash = compositeKey;
 
-      const result = await response.json();
-      const compositeKey = encodeCompositeKey(
-        LATEST_KEY_VERSION,
-        result.id,
-        keyBuffer
+            setLink(url.toString());
+            setCopied(false);
+          },
+          onError: (error) => {
+            setError(error.message || "Error al almacenar los datos");
+          },
+        }
       );
-
-      const url = new URL(window.location.href);
-      url.pathname = `/unseal/${result.id}`;
-      url.hash = compositeKey;
-
-      setLink(url.toString());
-      setCopied(false);
     } catch (e) {
       console.error(e);
       setError((e as Error).message);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -255,29 +251,37 @@ export default function CreditCardShare() {
                   <FormField
                     control={form.control}
                     name="cardNumber"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-foreground">
-                          Número de tarjeta
-                        </FormLabel>
-                        <FormControl>
-                          <Input
-                            placeholder="1234 5678 9012 3456"
-                            {...field}
-                            onChange={(e) => {
-                              const formatted = formatCardNumber(
-                                e.target.value
-                              );
-                              if (formatted.replace(/\s/g, "").length <= 16) {
-                                field.onChange(formatted);
-                              }
-                            }}
-                            className="bg-input border-border text-foreground placeholder:text-muted-foreground focus:border-ring font-mono"
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
+                    render={({ field }) => {
+                      const cardType = getCardType(field.value);
+                      return (
+                        <FormItem>
+                          <FormLabel className="text-foreground flex items-center gap-2">
+                            Número de tarjeta
+                            {cardType && (
+                              <span className="text-xs font-medium text-muted-foreground bg-muted px-2 py-1 rounded">
+                                {cardType}
+                              </span>
+                            )}
+                          </FormLabel>
+                          <FormControl>
+                            <Input
+                              placeholder="1234 5678 9012 3456"
+                              {...field}
+                              onChange={(e) => {
+                                const formatted = formatCardNumber(
+                                  e.target.value
+                                );
+                                if (formatted.replace(/\s/g, "").length <= 16) {
+                                  field.onChange(formatted);
+                                }
+                              }}
+                              className="bg-input border-border text-foreground placeholder:text-muted-foreground focus:border-ring font-mono"
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      );
+                    }}
                   />
 
                   <div className="grid grid-cols-2 gap-4">
@@ -424,12 +428,12 @@ export default function CreditCardShare() {
                     </div>
                     <Button
                       type="submit"
-                      disabled={loading}
+                      disabled={isPending}
                       className="bg-primary hover:bg-primary/90 text-primary-foreground py-3 px-6 text-lg font-medium w-full sm:w-2/3"
                       size="lg"
                     >
                       <Shield className="h-5 w-5 mr-2" />
-                      {loading ? "Encriptando..." : "Encriptar y Compartir"}
+                      {isPending ? "Encriptando..." : "Encriptar y Compartir"}
                     </Button>
                   </div>
                 </CardContent>

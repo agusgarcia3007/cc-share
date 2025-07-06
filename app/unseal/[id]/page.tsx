@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useParams } from "next/navigation";
+import { useLoadCard } from "@/services/cards/query";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -29,24 +30,33 @@ export default function UnsealPage() {
   const params = useParams();
   const [compositeKey, setCompositeKey] = useState("");
   const [cardData, setCardData] = useState<CardData | null>(null);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [remainingReads, setRemainingReads] = useState<number | null>(null);
   const [copied, setCopied] = useState<{ [key: string]: boolean }>({});
   const [isKeyFromUrl, setIsKeyFromUrl] = useState(false);
   const [initializing, setInitializing] = useState(true);
 
+  const id = params.id as string;
+  const {
+    data: encryptedData,
+    isLoading,
+    isError,
+    error: queryError,
+  } = useLoadCard(id);
+
   const handleDecrypt = useCallback(
     async (key?: string) => {
       const keyToUse = key || compositeKey;
-
       try {
         setError("");
         setCardData(null);
-        setLoading(true);
 
         if (!keyToUse) {
           throw new Error("Por favor ingresa una clave de cifrado");
+        }
+
+        if (!encryptedData) {
+          throw new Error("No se pudo cargar el dato");
         }
 
         let decoded;
@@ -56,35 +66,20 @@ export default function UnsealPage() {
           throw new Error("Formato de clave de cifrado inválido");
         }
 
-        const { id, encryptionKey } = decoded;
-
-        if (id !== (params.id as string)) {
+        const { id: keyId, encryptionKey } = decoded;
+        if (keyId !== id) {
           throw new Error("La clave de cifrado no corresponde a este secreto");
         }
 
-        const response = await fetch(`/api/load?id=${id}`);
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          if (response.status === 404) {
-            throw new Error("Este secreto ha expirado o no existe");
-          } else if (response.status === 400) {
-            throw new Error("Solicitud inválida");
-          } else {
-            throw new Error(errorData.error || "No se pudo cargar el dato");
-          }
-        }
-
-        const {
-          encrypted,
-          iv,
-          remainingReads: remaining,
-        } = await response.json();
-        setRemainingReads(remaining);
+        setRemainingReads(encryptedData.remainingReads);
 
         let decryptedText;
         try {
-          decryptedText = await decrypt(encrypted, encryptionKey, iv);
+          decryptedText = await decrypt(
+            encryptedData.encrypted,
+            encryptionKey,
+            encryptedData.iv
+          );
         } catch {
           throw new Error(
             "No se pudo descifrar la información. Es posible que la clave de cifrado sea incorrecta."
@@ -100,14 +95,12 @@ export default function UnsealPage() {
 
         setCardData(data);
       } catch (error) {
-        console.error(error);
         setError((error as Error).message);
       } finally {
-        setLoading(false);
         setInitializing(false);
       }
     },
-    [compositeKey, params.id]
+    [compositeKey, id, encryptedData]
   );
 
   useEffect(() => {
@@ -116,12 +109,21 @@ export default function UnsealPage() {
       if (hash) {
         setCompositeKey(hash);
         setIsKeyFromUrl(true);
-        handleDecrypt(hash);
+        if (encryptedData) {
+          handleDecrypt(hash);
+        }
       } else {
         setInitializing(false);
       }
     }
-  }, [handleDecrypt]);
+  }, [handleDecrypt, encryptedData]);
+
+  useEffect(() => {
+    if (isError && queryError) {
+      setError((queryError as any).message || "No se pudo cargar el dato");
+      setInitializing(false);
+    }
+  }, [isError, queryError]);
 
   const copyToClipboard = (text: string, field: string) => {
     navigator.clipboard.writeText(text);
@@ -350,10 +352,10 @@ export default function UnsealPage() {
 
               <Button
                 onClick={() => handleDecrypt()}
-                disabled={loading || !compositeKey}
+                disabled={isLoading || !compositeKey}
                 className="w-full"
               >
-                {loading ? "Desencriptando..." : "Desencriptar tarjeta"}
+                {isLoading ? "Desencriptando..." : "Desencriptar tarjeta"}
               </Button>
 
               {!isKeyFromUrl && (
