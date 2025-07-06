@@ -1,9 +1,5 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { useParams } from "next/navigation";
-import { useLoadCard } from "@/services/cards/query";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -15,10 +11,14 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { decrypt } from "@/lib/encryption";
 import { decodeCompositeKey } from "@/lib/encoding";
-import { Copy, Check, CreditCard, Shield, AlertTriangle } from "lucide-react";
+import { decrypt } from "@/lib/encryption";
+import { useLoadCard } from "@/services/cards/query";
+import { AlertTriangle, Copy, CreditCard, Shield } from "lucide-react";
 import Link from "next/link";
+import { useParams } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
 
 interface CardData {
   cardholderName: string;
