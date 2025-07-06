@@ -158,13 +158,14 @@ http://localhost:3000
 ### Store Encrypted Data
 
 ```bash
-POST /api/v1/share
+POST /api/store
 Content-Type: application/json
 
 {
-  "encrypted": "base64-encoded-encrypted-data",
+  "encrypted": "base58-encoded-encrypted-data",
+  "iv": "base58-encoded-initialization-vector",
   "reads": 3,
-  "ttl": 3600
+  "ttl": 24
 }
 ```
 
@@ -173,23 +174,25 @@ Content-Type: application/json
 ```json
 {
   "id": "unique-share-id",
-  "url": "https://cc-share.app/share/unique-share-id#encryption-key",
+  "url": "https://your-domain.com/unseal/unique-share-id",
   "expiresAt": "2024-01-20T15:30:00Z",
-  "remainingReads": 3
+  "reads": 3,
+  "ttl": 24
 }
 ```
 
 ### Retrieve Encrypted Data
 
 ```bash
-GET /api/v1/share/[id]
+GET /api/load?id=unique-share-id
 ```
 
 **Response:**
 
 ```json
 {
-  "encrypted": "base64-encoded-encrypted-data",
+  "encrypted": "base58-encoded-encrypted-data",
+  "iv": "base58-encoded-initialization-vector",
   "remainingReads": 2
 }
 ```
@@ -208,7 +211,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🙏 Acknowledgments
 
-- Inspired by [envshare](https://github.com/chronark/envshare) by [@chronark](https://github.com/chronark)
+- Based on [envshare](https://github.com/chronark/envshare) by [@chronark](https://github.com/chronark)
 - Built with [shadcn/ui](https://ui.shadcn.com/) components
 - Powered by [Upstash Redis](https://upstash.com/) for serverless storage
 

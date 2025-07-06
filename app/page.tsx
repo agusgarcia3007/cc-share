@@ -1,8 +1,5 @@
 "use client";
 
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -11,6 +8,14 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -25,16 +30,22 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
-import { CreditCard, Shield, Clock, Eye, HelpCircle } from "lucide-react";
 import { formatCardNumber, formatExpiryDate } from "@/lib/utils";
+import { encrypt, exportKey, toBase58 } from "@/lib/encryption";
+import { encodeCompositeKey, LATEST_KEY_VERSION } from "@/lib/encoding";
+import { zodResolver } from "@hookform/resolvers/zod";
+import {
+  Clock,
+  CreditCard,
+  Eye,
+  HelpCircle,
+  Shield,
+  Copy,
+  Check,
+} from "lucide-react";
+import { useForm } from "react-hook-form";
+import { useState } from "react";
+import { z } from "zod";
 
 const formSchema = z.object({
   cardholderName: z
@@ -43,12 +54,41 @@ const formSchema = z.object({
   cardNumber: z
     .string()
     .min(19, "Número de tarjeta debe tener 16 dígitos")
-    .max(19, "Número de tarjeta debe tener 16 dígitos"),
-  expiryDate: z.string().regex(/^\d{2}\/\d{2}$/, "Formato debe ser MM/YY"),
+    .max(19, "Número de tarjeta debe tener 16 dígitos")
+    .refine((val) => {
+      const digits = val.replace(/\s/g, "");
+      return /^\d{16}$/.test(digits);
+    }, "El número de tarjeta debe contener solo dígitos"),
+  expiryDate: z
+    .string()
+    .regex(/^\d{2}\/\d{2}$/, "Formato debe ser MM/YY")
+    .refine((val) => {
+      const [month, year] = val.split("/");
+      const currentDate = new Date();
+      const currentYear = currentDate.getFullYear() % 100;
+      const currentMonth = currentDate.getMonth() + 1;
+
+      const expMonth = parseInt(month, 10);
+      const expYear = parseInt(year, 10);
+
+      if (expMonth < 1 || expMonth > 12) {
+        return false;
+      }
+
+      if (
+        expYear < currentYear ||
+        (expYear === currentYear && expMonth < currentMonth)
+      ) {
+        return false;
+      }
+
+      return true;
+    }, "La tarjeta no puede estar expirada"),
   cvv: z
     .string()
     .min(3, "CVV debe tener al menos 3 dígitos")
-    .max(4, "CVV no puede tener más de 4 dígitos"),
+    .max(4, "CVV no puede tener más de 4 dígitos")
+    .regex(/^\d{3,4}$/, "CVV debe contener solo números"),
   reads: z.string(),
   ttl: z.string(),
 });
@@ -56,6 +96,11 @@ const formSchema = z.object({
 type FormData = z.infer<typeof formSchema>;
 
 export default function CreditCardShare() {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [link, setLink] = useState("");
+  const [copied, setCopied] = useState(false);
+
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -68,8 +113,58 @@ export default function CreditCardShare() {
     },
   });
 
-  const onSubmit = (data: FormData) => {
-    console.log(data);
+  const onSubmit = async (data: FormData) => {
+    try {
+      setError("");
+      setLink("");
+      setLoading(true);
+
+      const cardData = {
+        cardholderName: data.cardholderName,
+        cardNumber: data.cardNumber,
+        expiryDate: data.expiryDate,
+        cvv: data.cvv,
+      };
+
+      const { encrypted, iv, key } = await encrypt(JSON.stringify(cardData));
+      const keyBuffer = await exportKey(key);
+
+      const response = await fetch("/api/store", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          encrypted: toBase58(encrypted),
+          iv: toBase58(iv),
+          ttl: parseInt(data.ttl),
+          reads: data.reads === "999" ? null : parseInt(data.reads),
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Error al almacenar los datos");
+      }
+
+      const result = await response.json();
+      const compositeKey = encodeCompositeKey(
+        LATEST_KEY_VERSION,
+        result.id,
+        keyBuffer
+      );
+
+      const url = new URL(window.location.href);
+      url.pathname = `/unseal/${result.id}`;
+      url.hash = compositeKey;
+
+      setLink(url.toString());
+      setCopied(false);
+    } catch (e) {
+      console.error(e);
+      setError((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -84,225 +179,261 @@ export default function CreditCardShare() {
           </p>
         </div>
 
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)}>
-            <Card className="bg-card border-border">
-              <CardHeader className="pb-6">
-                <CardTitle className="flex items-center gap-2 text-foreground">
-                  <CreditCard className="h-5 w-5" />
-                  Credit Card Details
-                </CardTitle>
-                <CardDescription className="text-muted-foreground">
-                  Enter the credit card information to be securely shared
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <FormField
-                  control={form.control}
-                  name="cardholderName"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-foreground">
-                        Cardholder Name
-                      </FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="John Doe"
-                          {...field}
-                          className="bg-input border-border text-foreground placeholder:text-muted-foreground focus:border-ring"
-                        />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
+        {error && (
+          <div className="mb-6 p-4 bg-destructive/10 border border-destructive/20 rounded-lg">
+            <p className="text-destructive text-sm">{error}</p>
+          </div>
+        )}
 
-                <FormField
-                  control={form.control}
-                  name="cardNumber"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-foreground">
-                        Card Number
-                      </FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="1234 5678 9012 3456"
-                          {...field}
-                          onChange={(e) => {
-                            const formatted = formatCardNumber(e.target.value);
-                            if (formatted.replace(/\s/g, "").length <= 16) {
-                              field.onChange(formatted);
-                            }
-                          }}
-                          className="bg-input border-border text-foreground placeholder:text-muted-foreground focus:border-ring font-mono"
-                        />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-
-                <div className="grid grid-cols-2 gap-4">
+        {link ? (
+          <div className="text-center">
+            <h2 className="text-2xl font-bold mb-6">Share this link</h2>
+            <div className="flex items-center gap-2 p-4 bg-muted rounded-lg mb-6">
+              <code className="flex-1 text-sm break-all">{link}</code>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  navigator.clipboard.writeText(link);
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 2000);
+                }}
+              >
+                {copied ? (
+                  <Check className="h-4 w-4" />
+                ) : (
+                  <Copy className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
+            <Button
+              onClick={() => {
+                setLink("");
+                form.reset();
+              }}
+              variant="outline"
+            >
+              Share Another
+            </Button>
+          </div>
+        ) : (
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)}>
+              <Card className="bg-card border-border">
+                <CardHeader className="pb-6">
+                  <CardTitle className="flex items-center gap-2 text-foreground">
+                    <CreditCard className="h-5 w-5" />
+                    Credit Card Details
+                  </CardTitle>
+                  <CardDescription className="text-muted-foreground">
+                    Enter the credit card information to be securely shared
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
                   <FormField
                     control={form.control}
-                    name="expiryDate"
+                    name="cardholderName"
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel className="text-foreground">
-                          Expiry Date
+                          Cardholder Name
                         </FormLabel>
                         <FormControl>
                           <Input
-                            placeholder="MM/YY"
+                            placeholder="John Doe"
+                            {...field}
+                            className="bg-input border-border text-foreground placeholder:text-muted-foreground focus:border-ring"
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="cardNumber"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-foreground">
+                          Card Number
+                        </FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="1234 5678 9012 3456"
                             {...field}
                             onChange={(e) => {
-                              const formatted = formatExpiryDate(
+                              const formatted = formatCardNumber(
                                 e.target.value
                               );
-                              if (formatted.length <= 5) {
+                              if (formatted.replace(/\s/g, "").length <= 16) {
                                 field.onChange(formatted);
                               }
                             }}
                             className="bg-input border-border text-foreground placeholder:text-muted-foreground focus:border-ring font-mono"
                           />
                         </FormControl>
+                        <FormMessage />
                       </FormItem>
                     )}
                   />
-                  <FormField
-                    control={form.control}
-                    name="cvv"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-foreground">CVV</FormLabel>
-                        <FormControl>
-                          <Input
-                            placeholder="123"
-                            {...field}
-                            onChange={(e) => {
-                              const value = e.target.value.replace(
-                                /[^0-9]/g,
-                                ""
-                              );
-                              if (value.length <= 4) {
-                                field.onChange(value);
-                              }
-                            }}
-                            className="bg-input border-border text-foreground placeholder:text-muted-foreground focus:border-ring font-mono"
-                          />
-                        </FormControl>
-                      </FormItem>
-                    )}
-                  />
-                </div>
 
-                <Separator className="bg-border" />
-
-                <div className="flex flex-col sm:flex-row gap-4 sm:items-end">
-                  <div className="flex gap-2 w-full sm:w-1/3">
+                  <div className="grid grid-cols-2 gap-4">
                     <FormField
                       control={form.control}
-                      name="reads"
+                      name="expiryDate"
                       render={({ field }) => (
-                        <FormItem className="flex-1">
-                          <FormLabel className="text-foreground flex items-center gap-2">
-                            <Eye className="h-4 w-4" />
-                            READS
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p>
-                                  The number of reads determines how often the
-                                  data can be shared, before it deletes itself.
-                                  0 means unlimited.
-                                </p>
-                              </TooltipContent>
-                            </Tooltip>
+                        <FormItem>
+                          <FormLabel className="text-foreground">
+                            Expiry Date
                           </FormLabel>
-                          <Select
-                            onValueChange={field.onChange}
-                            defaultValue={field.value}
-                          >
-                            <FormControl>
-                              <SelectTrigger className="bg-input border-border w-full text-foreground">
-                                <SelectValue />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent className="bg-popover border-border">
-                              <SelectItem value="1">1</SelectItem>
-                              <SelectItem value="3">3</SelectItem>
-                              <SelectItem value="5">5</SelectItem>
-                              <SelectItem value="10">10</SelectItem>
-                              <SelectItem value="999">Unlimited</SelectItem>
-                            </SelectContent>
-                          </Select>
+                          <FormControl>
+                            <Input
+                              placeholder="MM/YY"
+                              {...field}
+                              onChange={(e) => {
+                                const formatted = formatExpiryDate(
+                                  e.target.value
+                                );
+                                if (formatted.length <= 5) {
+                                  field.onChange(formatted);
+                                }
+                              }}
+                              className="bg-input border-border text-foreground placeholder:text-muted-foreground focus:border-ring font-mono"
+                            />
+                          </FormControl>
+                          <FormMessage />
                         </FormItem>
                       )}
                     />
                     <FormField
                       control={form.control}
-                      name="ttl"
+                      name="cvv"
                       render={({ field }) => (
-                        <FormItem className="flex-1">
-                          <FormLabel className="text-foreground flex items-center gap-2">
-                            <Clock className="h-4 w-4" />
-                            TTL
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p>
-                                  You can add a TTL (time to live) to the data,
-                                  to automatically delete it after a certain
-                                  amount of time. 0 means no TTL.
-                                </p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </FormLabel>
-                          <Select
-                            onValueChange={field.onChange}
-                            defaultValue={field.value}
-                          >
-                            <FormControl>
-                              <SelectTrigger className="bg-input w-full border-border text-foreground">
-                                <SelectValue />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent className="bg-popover border-border">
-                              <SelectItem value="1">1 Hour</SelectItem>
-                              <SelectItem value="24">1 Day</SelectItem>
-                              <SelectItem value="168">7 Days</SelectItem>
-                              <SelectItem value="720">30 Days</SelectItem>
-                            </SelectContent>
-                          </Select>
+                        <FormItem>
+                          <FormLabel className="text-foreground">CVV</FormLabel>
+                          <FormControl>
+                            <Input
+                              placeholder="123"
+                              {...field}
+                              onChange={(e) => {
+                                const value = e.target.value.replace(
+                                  /[^0-9]/g,
+                                  ""
+                                );
+                                if (value.length <= 4) {
+                                  field.onChange(value);
+                                }
+                              }}
+                              className="bg-input border-border text-foreground placeholder:text-muted-foreground focus:border-ring font-mono"
+                            />
+                          </FormControl>
+                          <FormMessage />
                         </FormItem>
                       )}
                     />
                   </div>
-                  <Button
-                    type="submit"
-                    className="bg-primary hover:bg-primary/90 text-primary-foreground py-3 px-6 text-lg font-medium w-full sm:w-2/3"
-                    size="lg"
-                  >
-                    <Shield className="h-5 w-5 mr-2" />
-                    Encrypt and Share
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </form>
-        </Form>
 
-        {Object.keys(form.formState.errors).length > 0 && (
-          <div className="mt-4 space-y-2">
-            {Object.entries(form.formState.errors).map(([key, error]) => (
-              <div key={key} className="text-destructive text-sm">
-                {error?.message}
-              </div>
-            ))}
-          </div>
+                  <Separator className="bg-border" />
+
+                  <div className="flex flex-col sm:flex-row gap-4 sm:items-end">
+                    <div className="flex gap-2 w-full sm:w-1/3">
+                      <FormField
+                        control={form.control}
+                        name="reads"
+                        render={({ field }) => (
+                          <FormItem className="flex-1">
+                            <FormLabel className="text-foreground flex items-center gap-2">
+                              <Eye className="h-4 w-4" />
+                              READS
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>
+                                    The number of reads determines how often the
+                                    data can be shared, before it deletes
+                                    itself. 0 means unlimited.
+                                  </p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </FormLabel>
+                            <Select
+                              onValueChange={field.onChange}
+                              defaultValue={field.value}
+                            >
+                              <FormControl>
+                                <SelectTrigger className="bg-input border-border w-full text-foreground">
+                                  <SelectValue />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent className="bg-popover border-border">
+                                <SelectItem value="1">1</SelectItem>
+                                <SelectItem value="3">3</SelectItem>
+                                <SelectItem value="5">5</SelectItem>
+                                <SelectItem value="10">10</SelectItem>
+                                <SelectItem value="999">Unlimited</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="ttl"
+                        render={({ field }) => (
+                          <FormItem className="flex-1">
+                            <FormLabel className="text-foreground flex items-center gap-2">
+                              <Clock className="h-4 w-4" />
+                              TTL
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>
+                                    You can add a TTL (time to live) to the
+                                    data, to automatically delete it after a
+                                    certain amount of time. 0 means no TTL.
+                                  </p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </FormLabel>
+                            <Select
+                              onValueChange={field.onChange}
+                              defaultValue={field.value}
+                            >
+                              <FormControl>
+                                <SelectTrigger className="bg-input w-full border-border text-foreground">
+                                  <SelectValue />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent className="bg-popover border-border">
+                                <SelectItem value="1">1 Hour</SelectItem>
+                                <SelectItem value="24">1 Day</SelectItem>
+                                <SelectItem value="168">7 Days</SelectItem>
+                                <SelectItem value="720">30 Days</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                    <Button
+                      type="submit"
+                      disabled={loading}
+                      className="bg-primary hover:bg-primary/90 text-primary-foreground py-3 px-6 text-lg font-medium w-full sm:w-2/3"
+                      size="lg"
+                    >
+                      <Shield className="h-5 w-5 mr-2" />
+                      {loading ? "Encrypting..." : "Encrypt and Share"}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </form>
+          </Form>
         )}
 
         <div className="mt-8 text-sm text-muted-foreground max-w-xl mx-auto">
