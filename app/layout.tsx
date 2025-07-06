@@ -1,6 +1,7 @@
 import { Toaster } from "@/components/ui/sonner";
 import type { Metadata } from "next";
 import { Geist } from "next/font/google";
+import Script from "next/script";
 import "./globals.css";
 import { Providers } from "./providers";
 
@@ -21,14 +22,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <header>
-        <script
-          defer
+      <body className={`${geistSans.className}antialiased`}>
+        <Script
           src="https://cloud.umami.is/script.js"
           data-website-id="918342f6-5e5a-4667-b24b-19493c1dc4bf"
-        ></script>
-      </header>
-      <body className={`${geistSans.className}antialiased`}>
+          strategy="afterInteractive"
+        />
         <Providers>
           {children}
           <Toaster />
