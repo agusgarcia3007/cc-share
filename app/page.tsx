@@ -172,10 +172,11 @@ export default function CreditCardShare() {
       <div className="max-w-2xl mx-auto pt-16">
         <div className="text-center mb-12">
           <h1 className="text-4xl font-bold mb-4 text-foreground">
-            Encrypt and Share
+            Encriptar y Compartir
           </h1>
           <p className="text-muted-foreground text-lg">
-            Securely share credit card details with end-to-end encryption
+            Comparte datos de tarjeta de crédito de forma segura con cifrado de
+            extremo a extremo
           </p>
         </div>
 
@@ -187,7 +188,7 @@ export default function CreditCardShare() {
 
         {link ? (
           <div className="text-center">
-            <h2 className="text-2xl font-bold mb-6">Share this link</h2>
+            <h2 className="text-2xl font-bold mb-6">Comparte este enlace</h2>
             <div className="flex items-center gap-2 p-4 bg-muted rounded-lg mb-6">
               <code className="flex-1 text-sm break-all">{link}</code>
               <Button
@@ -213,7 +214,7 @@ export default function CreditCardShare() {
               }}
               variant="outline"
             >
-              Share Another
+              Compartir otra tarjeta
             </Button>
           </div>
         ) : (
@@ -223,10 +224,11 @@ export default function CreditCardShare() {
                 <CardHeader className="pb-6">
                   <CardTitle className="flex items-center gap-2 text-foreground">
                     <CreditCard className="h-5 w-5" />
-                    Credit Card Details
+                    Detalles de la tarjeta
                   </CardTitle>
                   <CardDescription className="text-muted-foreground">
-                    Enter the credit card information to be securely shared
+                    Ingresa la información de la tarjeta que deseas compartir de
+                    forma segura
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
@@ -236,11 +238,11 @@ export default function CreditCardShare() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel className="text-foreground">
-                          Cardholder Name
+                          Nombre del titular
                         </FormLabel>
                         <FormControl>
                           <Input
-                            placeholder="John Doe"
+                            placeholder="Juan Pérez"
                             {...field}
                             className="bg-input border-border text-foreground placeholder:text-muted-foreground focus:border-ring"
                           />
@@ -256,7 +258,7 @@ export default function CreditCardShare() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel className="text-foreground">
-                          Card Number
+                          Número de tarjeta
                         </FormLabel>
                         <FormControl>
                           <Input
@@ -285,11 +287,11 @@ export default function CreditCardShare() {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel className="text-foreground">
-                            Expiry Date
+                            Fecha de expiración
                           </FormLabel>
                           <FormControl>
                             <Input
-                              placeholder="MM/YY"
+                              placeholder="MM/AA"
                               {...field}
                               onChange={(e) => {
                                 const formatted = formatExpiryDate(
@@ -345,16 +347,16 @@ export default function CreditCardShare() {
                           <FormItem className="flex-1">
                             <FormLabel className="text-foreground flex items-center gap-2">
                               <Eye className="h-4 w-4" />
-                              READS
+                              VISTAS
                               <Tooltip>
                                 <TooltipTrigger asChild>
                                   <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
                                 </TooltipTrigger>
                                 <TooltipContent>
                                   <p>
-                                    The number of reads determines how often the
-                                    data can be shared, before it deletes
-                                    itself. 0 means unlimited.
+                                    El número de vistas determina cuántas veces
+                                    se puede ver la tarjeta antes de eliminarse.
+                                    0 significa ilimitado.
                                   </p>
                                 </TooltipContent>
                               </Tooltip>
@@ -373,7 +375,7 @@ export default function CreditCardShare() {
                                 <SelectItem value="3">3</SelectItem>
                                 <SelectItem value="5">5</SelectItem>
                                 <SelectItem value="10">10</SelectItem>
-                                <SelectItem value="999">Unlimited</SelectItem>
+                                <SelectItem value="999">Ilimitado</SelectItem>
                               </SelectContent>
                             </Select>
                           </FormItem>
@@ -386,16 +388,16 @@ export default function CreditCardShare() {
                           <FormItem className="flex-1">
                             <FormLabel className="text-foreground flex items-center gap-2">
                               <Clock className="h-4 w-4" />
-                              TTL
+                              TIEMPO DE VIDA
                               <Tooltip>
                                 <TooltipTrigger asChild>
                                   <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
                                 </TooltipTrigger>
                                 <TooltipContent>
                                   <p>
-                                    You can add a TTL (time to live) to the
-                                    data, to automatically delete it after a
-                                    certain amount of time. 0 means no TTL.
+                                    Puedes agregar un tiempo de vida (TTL) para
+                                    eliminar la tarjeta automáticamente después
+                                    de cierto tiempo. 0 significa sin límite.
                                   </p>
                                 </TooltipContent>
                               </Tooltip>
@@ -410,10 +412,10 @@ export default function CreditCardShare() {
                                 </SelectTrigger>
                               </FormControl>
                               <SelectContent className="bg-popover border-border">
-                                <SelectItem value="1">1 Hour</SelectItem>
-                                <SelectItem value="24">1 Day</SelectItem>
-                                <SelectItem value="168">7 Days</SelectItem>
-                                <SelectItem value="720">30 Days</SelectItem>
+                                <SelectItem value="1">1 Hora</SelectItem>
+                                <SelectItem value="24">1 Día</SelectItem>
+                                <SelectItem value="168">7 Días</SelectItem>
+                                <SelectItem value="720">30 Días</SelectItem>
                               </SelectContent>
                             </Select>
                           </FormItem>
@@ -427,7 +429,7 @@ export default function CreditCardShare() {
                       size="lg"
                     >
                       <Shield className="h-5 w-5 mr-2" />
-                      {loading ? "Encrypting..." : "Encrypt and Share"}
+                      {loading ? "Encriptando..." : "Encriptar y Compartir"}
                     </Button>
                   </div>
                 </CardContent>
@@ -438,9 +440,9 @@ export default function CreditCardShare() {
 
         <div className="mt-8 text-sm text-muted-foreground max-w-xl mx-auto">
           <div>
-            <strong className="text-foreground">Security:</strong> Clicking
-            Share will generate a new symmetrical key and encrypt your data
-            before sending only the encrypted data to the server.
+            <strong className="text-foreground">Seguridad:</strong> Al hacer
+            clic en Compartir se genera una nueva clave simétrica y se encriptan
+            tus datos antes de enviar solo la información cifrada al servidor.
           </div>
         </div>
       </div>

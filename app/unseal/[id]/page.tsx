@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
@@ -36,6 +36,80 @@ export default function UnsealPage() {
   const [isKeyFromUrl, setIsKeyFromUrl] = useState(false);
   const [initializing, setInitializing] = useState(true);
 
+  const handleDecrypt = useCallback(
+    async (key?: string) => {
+      const keyToUse = key || compositeKey;
+
+      try {
+        setError("");
+        setCardData(null);
+        setLoading(true);
+
+        if (!keyToUse) {
+          throw new Error("Por favor ingresa una clave de cifrado");
+        }
+
+        let decoded;
+        try {
+          decoded = decodeCompositeKey(keyToUse);
+        } catch {
+          throw new Error("Formato de clave de cifrado inválido");
+        }
+
+        const { id, encryptionKey } = decoded;
+
+        if (id !== (params.id as string)) {
+          throw new Error("La clave de cifrado no corresponde a este secreto");
+        }
+
+        const response = await fetch(`/api/load?id=${id}`);
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          if (response.status === 404) {
+            throw new Error("Este secreto ha expirado o no existe");
+          } else if (response.status === 400) {
+            throw new Error("Solicitud inválida");
+          } else {
+            throw new Error(errorData.error || "No se pudo cargar el dato");
+          }
+        }
+
+        const {
+          encrypted,
+          iv,
+          remainingReads: remaining,
+        } = await response.json();
+        setRemainingReads(remaining);
+
+        let decryptedText;
+        try {
+          decryptedText = await decrypt(encrypted, encryptionKey, iv);
+        } catch {
+          throw new Error(
+            "No se pudo descifrar la información. Es posible que la clave de cifrado sea incorrecta."
+          );
+        }
+
+        let data;
+        try {
+          data = JSON.parse(decryptedText) as CardData;
+        } catch {
+          throw new Error("Formato de datos inválido");
+        }
+
+        setCardData(data);
+      } catch (error) {
+        console.error(error);
+        setError((error as Error).message);
+      } finally {
+        setLoading(false);
+        setInitializing(false);
+      }
+    },
+    [compositeKey, params.id]
+  );
+
   useEffect(() => {
     if (typeof window !== "undefined") {
       const hash = window.location.hash.replace(/^#/, "");
@@ -47,78 +121,7 @@ export default function UnsealPage() {
         setInitializing(false);
       }
     }
-  }, []);
-
-  const handleDecrypt = async (key?: string) => {
-    const keyToUse = key || compositeKey;
-
-    try {
-      setError("");
-      setCardData(null);
-      setLoading(true);
-
-      if (!keyToUse) {
-        throw new Error("Por favor ingresa una clave de cifrado");
-      }
-
-      let decoded;
-      try {
-        decoded = decodeCompositeKey(keyToUse);
-      } catch (e) {
-        throw new Error("Formato de clave de cifrado inválido");
-      }
-
-      const { id, encryptionKey } = decoded;
-
-      if (id !== (params.id as string)) {
-        throw new Error("La clave de cifrado no corresponde a este secreto");
-      }
-
-      const response = await fetch(`/api/load?id=${id}`);
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        if (response.status === 404) {
-          throw new Error("Este secreto ha expirado o no existe");
-        } else if (response.status === 400) {
-          throw new Error("Solicitud inválida");
-        } else {
-          throw new Error(errorData.error || "No se pudo cargar el dato");
-        }
-      }
-
-      const {
-        encrypted,
-        iv,
-        remainingReads: remaining,
-      } = await response.json();
-      setRemainingReads(remaining);
-
-      let decryptedText;
-      try {
-        decryptedText = await decrypt(encrypted, encryptionKey, iv);
-      } catch (e) {
-        throw new Error(
-          "No se pudo descifrar la información. Es posible que la clave de cifrado sea incorrecta."
-        );
-      }
-
-      let data;
-      try {
-        data = JSON.parse(decryptedText) as CardData;
-      } catch (e) {
-        throw new Error("Formato de datos inválido");
-      }
-
-      setCardData(data);
-    } catch (e) {
-      console.error(e);
-      setError((e as Error).message);
-    } finally {
-      setLoading(false);
-      setInitializing(false);
-    }
-  };
+  }, [handleDecrypt]);
 
   const copyToClipboard = (text: string, field: string) => {
     navigator.clipboard.writeText(text);
