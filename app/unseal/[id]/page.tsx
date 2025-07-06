@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams } from "next/navigation";
 import { useLoadCard } from "@/services/cards/query";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -32,7 +33,6 @@ export default function UnsealPage() {
   const [cardData, setCardData] = useState<CardData | null>(null);
   const [error, setError] = useState("");
   const [remainingReads, setRemainingReads] = useState<number | null>(null);
-  const [copied, setCopied] = useState<{ [key: string]: boolean }>({});
   const [isKeyFromUrl, setIsKeyFromUrl] = useState(false);
   const [initializing, setInitializing] = useState(true);
 
@@ -120,17 +120,14 @@ export default function UnsealPage() {
 
   useEffect(() => {
     if (isError && queryError) {
-      setError((queryError as any).message || "No se pudo cargar el dato");
+      setError((queryError as Error).message || "No se pudo cargar el dato");
       setInitializing(false);
     }
   }, [isError, queryError]);
 
   const copyToClipboard = (text: string, field: string) => {
     navigator.clipboard.writeText(text);
-    setCopied({ ...copied, [field]: true });
-    setTimeout(() => {
-      setCopied({ ...copied, [field]: false });
-    }, 2000);
+    toast.success(`${field} copiado al portapapeles`);
   };
 
   return (
@@ -222,14 +219,10 @@ export default function UnsealPage() {
                       variant="outline"
                       size="sm"
                       onClick={() =>
-                        copyToClipboard(cardData.cardholderName, "name")
+                        copyToClipboard(cardData.cardholderName, "Nombre")
                       }
                     >
-                      {copied.name ? (
-                        <Check className="h-4 w-4" />
-                      ) : (
-                        <Copy className="h-4 w-4" />
-                      )}
+                      <Copy className="h-4 w-4" />
                     </Button>
                   </div>
                 </div>
@@ -249,15 +242,11 @@ export default function UnsealPage() {
                       onClick={() =>
                         copyToClipboard(
                           cardData.cardNumber.replace(/\s/g, ""),
-                          "number"
+                          "Número de tarjeta"
                         )
                       }
                     >
-                      {copied.number ? (
-                        <Check className="h-4 w-4" />
-                      ) : (
-                        <Copy className="h-4 w-4" />
-                      )}
+                      <Copy className="h-4 w-4" />
                     </Button>
                   </div>
                 </div>
@@ -276,14 +265,13 @@ export default function UnsealPage() {
                         variant="outline"
                         size="sm"
                         onClick={() =>
-                          copyToClipboard(cardData.expiryDate, "expiry")
+                          copyToClipboard(
+                            cardData.expiryDate,
+                            "Fecha de expiración"
+                          )
                         }
                       >
-                        {copied.expiry ? (
-                          <Check className="h-4 w-4" />
-                        ) : (
-                          <Copy className="h-4 w-4" />
-                        )}
+                        <Copy className="h-4 w-4" />
                       </Button>
                     </div>
                   </div>
@@ -300,13 +288,9 @@ export default function UnsealPage() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => copyToClipboard(cardData.cvv, "cvv")}
+                        onClick={() => copyToClipboard(cardData.cvv, "CVV")}
                       >
-                        {copied.cvv ? (
-                          <Check className="h-4 w-4" />
-                        ) : (
-                          <Copy className="h-4 w-4" />
-                        )}
+                        <Copy className="h-4 w-4" />
                       </Button>
                     </div>
                   </div>
