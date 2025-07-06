@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -24,20 +25,26 @@ interface CardData {
   cvv: string;
 }
 
-export default function UnsealPage({ params }: { params: { id: string } }) {
+export default function UnsealPage() {
+  const params = useParams();
   const [compositeKey, setCompositeKey] = useState("");
   const [cardData, setCardData] = useState<CardData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [remainingReads, setRemainingReads] = useState<number | null>(null);
   const [copied, setCopied] = useState<{ [key: string]: boolean }>({});
+  const [isKeyFromUrl, setIsKeyFromUrl] = useState(false);
+  const [initializing, setInitializing] = useState(true);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
       const hash = window.location.hash.replace(/^#/, "");
       if (hash) {
         setCompositeKey(hash);
+        setIsKeyFromUrl(true);
         handleDecrypt(hash);
+      } else {
+        setInitializing(false);
       }
     }
   }, []);
@@ -51,19 +58,33 @@ export default function UnsealPage({ params }: { params: { id: string } }) {
       setLoading(true);
 
       if (!keyToUse) {
-        throw new Error("No composite key provided");
+        throw new Error("Por favor ingresa una clave de cifrado");
       }
 
-      const { id, encryptionKey } = decodeCompositeKey(keyToUse);
+      let decoded;
+      try {
+        decoded = decodeCompositeKey(keyToUse);
+      } catch (e) {
+        throw new Error("Formato de clave de cifrado inválido");
+      }
 
-      if (id !== params.id) {
-        throw new Error("ID mismatch");
+      const { id, encryptionKey } = decoded;
+
+      if (id !== (params.id as string)) {
+        throw new Error("La clave de cifrado no corresponde a este secreto");
       }
 
       const response = await fetch(`/api/load?id=${id}`);
+
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText || "Failed to load data");
+        const errorData = await response.json();
+        if (response.status === 404) {
+          throw new Error("Este secreto ha expirado o no existe");
+        } else if (response.status === 400) {
+          throw new Error("Solicitud inválida");
+        } else {
+          throw new Error(errorData.error || "No se pudo cargar el dato");
+        }
       }
 
       const {
@@ -73,14 +94,29 @@ export default function UnsealPage({ params }: { params: { id: string } }) {
       } = await response.json();
       setRemainingReads(remaining);
 
-      const decryptedText = await decrypt(encrypted, encryptionKey, iv);
-      const data = JSON.parse(decryptedText) as CardData;
+      let decryptedText;
+      try {
+        decryptedText = await decrypt(encrypted, encryptionKey, iv);
+      } catch (e) {
+        throw new Error(
+          "No se pudo descifrar la información. Es posible que la clave de cifrado sea incorrecta."
+        );
+      }
+
+      let data;
+      try {
+        data = JSON.parse(decryptedText) as CardData;
+      } catch (e) {
+        throw new Error("Formato de datos inválido");
+      }
+
       setCardData(data);
     } catch (e) {
       console.error(e);
       setError((e as Error).message);
     } finally {
       setLoading(false);
+      setInitializing(false);
     }
   };
 
@@ -97,35 +133,61 @@ export default function UnsealPage({ params }: { params: { id: string } }) {
       <div className="max-w-2xl mx-auto pt-16">
         <div className="text-center mb-12">
           <h1 className="text-4xl font-bold mb-4 text-foreground">
-            Decrypt Credit Card
+            Desencriptar tarjeta de crédito
           </h1>
           <p className="text-muted-foreground text-lg">
-            Enter the encryption key to view the shared credit card details
+            Ingresa la clave de cifrado para ver los datos compartidos de la
+            tarjeta
           </p>
         </div>
 
+        {initializing && (
+          <div className="mb-6 p-8 text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+            <p className="text-muted-foreground">
+              Cargando clave de cifrado...
+            </p>
+          </div>
+        )}
+
         {error && (
           <div className="mb-6 p-4 bg-destructive/10 border border-destructive/20 rounded-lg">
-            <div className="flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 text-destructive" />
-              <p className="text-destructive text-sm">{error}</p>
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-destructive mt-0.5 flex-shrink-0" />
+              <div className="flex-1">
+                <p className="text-destructive font-medium text-sm mb-1">
+                  Error
+                </p>
+                <p className="text-destructive text-sm">{error}</p>
+                {error.includes("expirado") && (
+                  <p className="text-destructive/80 text-xs mt-2">
+                    El secreto alcanzó su límite de vistas o expiró su tiempo de
+                    vida.
+                  </p>
+                )}
+                {error.includes("clave de cifrado") && !isKeyFromUrl && (
+                  <p className="text-destructive/80 text-xs mt-2">
+                    Asegúrate de usar la clave completa del enlace compartido.
+                  </p>
+                )}
+              </div>
             </div>
           </div>
         )}
 
-        {cardData ? (
+        {!initializing && cardData ? (
           <div className="space-y-6">
             {remainingReads !== null && (
               <div className="text-center p-4 bg-muted rounded-lg">
                 {remainingReads > 0 ? (
                   <p className="text-sm">
-                    This card can be viewed <strong>{remainingReads}</strong>{" "}
-                    more times.
+                    Esta tarjeta puede verse <strong>{remainingReads}</strong>{" "}
+                    vez/veces más.
                   </p>
                 ) : (
                   <p className="text-sm text-destructive">
-                    This was the last time this card could be viewed. It has
-                    been deleted.
+                    Esta fue la última vez que se pudo ver esta tarjeta. El
+                    secreto ha sido eliminado.
                   </p>
                 )}
               </div>
@@ -135,15 +197,15 @@ export default function UnsealPage({ params }: { params: { id: string } }) {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <CreditCard className="h-5 w-5" />
-                  Credit Card Details
+                  Detalles de la tarjeta
                 </CardTitle>
                 <CardDescription>
-                  Securely decrypted credit card information
+                  Información de la tarjeta desencriptada de forma segura
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="cardholderName">Cardholder Name</Label>
+                  <Label htmlFor="cardholderName">Nombre del titular</Label>
                   <div className="flex items-center gap-2">
                     <Input
                       id="cardholderName"
@@ -168,7 +230,7 @@ export default function UnsealPage({ params }: { params: { id: string } }) {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="cardNumber">Card Number</Label>
+                  <Label htmlFor="cardNumber">Número de tarjeta</Label>
                   <div className="flex items-center gap-2">
                     <Input
                       id="cardNumber"
@@ -197,7 +259,7 @@ export default function UnsealPage({ params }: { params: { id: string } }) {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="expiryDate">Expiry Date</Label>
+                    <Label htmlFor="expiryDate">Fecha de expiración</Label>
                     <div className="flex items-center gap-2">
                       <Input
                         id="expiryDate"
@@ -249,31 +311,36 @@ export default function UnsealPage({ params }: { params: { id: string } }) {
 
                 <div className="flex justify-center">
                   <Link href="/">
-                    <Button variant="outline">Share Another Card</Button>
+                    <Button variant="outline">Compartir otra tarjeta</Button>
                   </Link>
                 </div>
               </CardContent>
             </Card>
           </div>
-        ) : (
+        ) : !initializing ? (
           <Card className="bg-card border-border">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Shield className="h-5 w-5" />
-                Enter Encryption Key
+                Ingresar clave de cifrado
               </CardTitle>
               <CardDescription>
-                Provide the encryption key to decrypt the credit card data
+                {isKeyFromUrl
+                  ? "La clave de cifrado fue detectada desde el enlace. Haz clic en desencriptar para ver la tarjeta."
+                  : "Ingresa la clave de cifrado para desencriptar los datos de la tarjeta"}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="key">Encryption Key</Label>
+                <Label htmlFor="key">Clave de cifrado</Label>
                 <Input
                   id="key"
                   value={compositeKey}
-                  onChange={(e) => setCompositeKey(e.target.value)}
-                  placeholder="Enter the encryption key from the shared link"
+                  onChange={(e) => {
+                    setCompositeKey(e.target.value);
+                    setIsKeyFromUrl(false);
+                  }}
+                  placeholder="Ingresa la clave de cifrado del enlace compartido"
                   className="font-mono"
                 />
               </div>
@@ -283,16 +350,26 @@ export default function UnsealPage({ params }: { params: { id: string } }) {
                 disabled={loading || !compositeKey}
                 className="w-full"
               >
-                {loading ? "Decrypting..." : "Decrypt Card"}
+                {loading ? "Desencriptando..." : "Desencriptar tarjeta"}
               </Button>
+
+              {!isKeyFromUrl && (
+                <div className="text-xs text-muted-foreground">
+                  <p>
+                    La clave de cifrado debería cargarse automáticamente desde
+                    el enlace. Si la ingresas manualmente, asegúrate de copiar
+                    la clave completa.
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
-        )}
+        ) : null}
 
         <div className="mt-8 text-sm text-muted-foreground text-center">
           <p>
-            <strong>Security:</strong> Data is decrypted locally in your
-            browser. The server never sees your unencrypted information.
+            <strong>Seguridad:</strong> Los datos se desencriptan localmente en
+            tu navegador. El servidor nunca ve tu información sin cifrar.
           </p>
         </div>
       </div>
