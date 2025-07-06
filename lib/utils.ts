@@ -30,12 +30,25 @@ export function formatCardNumber(value: string): string {
 
 export function getCardType(cardNumber: string): string {
   const number = cardNumber.replace(/\s+/g, "");
-  
+
   if (/^4/.test(number)) {
     return "Visa";
   } else if (/^5[1-5]/.test(number) || /^2[2-7]/.test(number)) {
     return "MasterCard";
   }
-  
+
   return "";
+}
+
+export const trackEvent = (event: string, data?: Record<string, any>) => {
+  if (typeof window !== "undefined" && typeof umami !== "undefined") {
+    umami.track(event, data);
+  }
+};
+
+declare global {
+  function umami(event: string, data?: Record<string, any>): void;
+  namespace umami {
+    function track(event: string, data?: Record<string, any>): void;
+  }
 }

@@ -30,7 +30,12 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { formatCardNumber, formatExpiryDate, getCardType } from "@/lib/utils";
+import {
+  formatCardNumber,
+  formatExpiryDate,
+  getCardType,
+  trackEvent,
+} from "@/lib/utils";
 import { encrypt, exportKey, toBase58 } from "@/lib/encryption";
 import { encodeCompositeKey, LATEST_KEY_VERSION } from "@/lib/encoding";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -151,6 +156,11 @@ export default function CreditCardShare() {
 
             setLink(url.toString());
             setCopied(false);
+
+            trackEvent("card_encrypted", {
+              ttl: parseInt(data.ttl),
+              reads: data.reads === "999" ? "unlimited" : parseInt(data.reads),
+            });
           },
           onError: (error) => {
             setError(error.message || "Error al almacenar los datos");
@@ -194,6 +204,7 @@ export default function CreditCardShare() {
                   navigator.clipboard.writeText(link);
                   setCopied(true);
                   setTimeout(() => setCopied(false), 2000);
+                  trackEvent("share_link_copied");
                 }}
               >
                 {copied ? (
