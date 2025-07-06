@@ -40,15 +40,17 @@ export function getCardType(cardNumber: string): string {
   return "";
 }
 
-export const trackEvent = (event: string, data?: Record<string, any>) => {
+export const trackEvent = (event: string, data?: Record<string, unknown>) => {
   if (typeof window !== "undefined" && typeof umami !== "undefined") {
     umami.track(event, data);
   }
 };
 
 declare global {
-  function umami(event: string, data?: Record<string, any>): void;
-  namespace umami {
-    function track(event: string, data?: Record<string, any>): void;
+  interface UmamiTracker {
+    (event: string, data?: Record<string, unknown>): void;
+    track(event: string, data?: Record<string, unknown>): void;
   }
+
+  const umami: UmamiTracker;
 }
