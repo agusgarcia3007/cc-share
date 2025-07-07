@@ -14,7 +14,7 @@ import { Separator } from "@/components/ui/separator";
 import { decodeCompositeKey } from "@/lib/encoding";
 import { decrypt } from "@/lib/encryption";
 import { useLoadCard } from "@/services/cards/query";
-import { trackEvent } from "@/lib/utils";
+import { track } from "@vercel/analytics";
 import { AlertTriangle, Copy, CreditCard, Shield } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -96,9 +96,7 @@ export default function UnsealPage() {
 
         setCardData(data);
 
-        trackEvent("card_unsealed", {
-          remainingReads: encryptedData.remainingReads,
-        });
+        track("card_unsealed");
       } catch (error) {
         setError((error as Error).message);
       } finally {

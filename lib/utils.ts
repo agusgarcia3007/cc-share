@@ -39,35 +39,3 @@ export function getCardType(cardNumber: string): string {
 
   return "";
 }
-
-export const trackEvent = (event: string, data?: Record<string, unknown>) => {
-  if (typeof window === "undefined") {
-    console.warn("Umami: trackEvent called on server side");
-    return;
-  }
-
-  if (!window.umami) {
-    console.warn("Umami: tracker not loaded yet");
-    return;
-  }
-
-  try {
-    window.umami.track(event, data);
-    console.log(`Umami: tracked event "${event}"`, data);
-  } catch (error) {
-    console.error("Umami: error tracking event", error);
-  }
-};
-
-declare global {
-  interface UmamiTracker {
-    (event: string, data?: Record<string, unknown>): void;
-    track(event: string, data?: Record<string, unknown>): void;
-  }
-
-  interface Window {
-    umami?: UmamiTracker;
-  }
-
-  const umami: UmamiTracker;
-}
